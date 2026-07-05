@@ -1,0 +1,6 @@
+# 런타임(MCP 서버)
+fastmcp>=2.0
+
+# ingest 배치
+requests>=2.31
+python-dotenv>=1.0

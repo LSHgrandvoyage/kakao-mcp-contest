@@ -1,2 +1,13 @@
 # personal context
 fable_context.md
+
+# secrets
+.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# NOTE: data/lease.db 는 의도적으로 추적한다 (Git 소스 빌드 시 이미지에 동봉되는 사전적재 산출물)

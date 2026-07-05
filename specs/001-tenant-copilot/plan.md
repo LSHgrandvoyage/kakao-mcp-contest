@@ -45,7 +45,7 @@
 ### 2-1. ingest 파이프라인 (오프라인)
 1. `LAWD_CD=11680` × 최근 6개월(`YYYYMM` 6개) × **4 API** = 24 호출 (개발계정 일 10,000 한도 내)
 2. XML 파싱 → 정규화(결측 층·건축년도 처리, 금액 문자열→정수, 지번/도로명 정리)
-3. 테이블 적재: `apt_trade`, `apt_rent`, `villa_trade`, `villa_rent`
+3. 테이블 적재: **통합 `transactions` 테이블**(`property_type`/`deal_type` 컬럼으로 구분) — 구현 시 4개 분리 테이블보다 조인·집계가 단순해 통합 채택(정정)
 4. **시세 집계 사전계산**: (단지/건물 + 전용면적 버킷)별 매매가 중앙값 + 비교 거래 건수 → `price_stats`
 5. **인덱스**: 지번/단지명/전용면적 조회 키
 6. HUG 악성임대인 명단 적재 → `landlord_watchlist` (⚠️ §5 리스크 참조)
@@ -100,9 +100,11 @@
 ### `diagnose_lease_risk`
 - **description (영문)**:
   "Analyzes lease risk signals for a rental home in Gangnam-gu, Seoul with Lease Guide(전월세 길잡이). Given an address, deposit, and property type, it computes the jeonse-to-sale-price ratio from recent real-transaction data (Ministry of Land/국토부) and returns risk-zone indicators, price-estimate confidence with comparable-transaction counts, items to verify on the property register(등기부등본), and a malicious-landlord watchlist(HUG 악성임대인) check. It never declares a property 'safe'; it surfaces risk signals and next verification steps only. Preliminary screening, not legal advice."
-- **inputSchema**:
-  - `address` (string, required) — 강남구 내 주소
-  - `deposit` (integer, required) — 보증금(원)
+- **inputSchema** (구현 시 정정 — 자유주소→단지명+동+면적, 입력방식 A):
+  - `building_name` (string, required) — 단지/건물명 (예: 은마)
+  - `umd` (string, required) — 법정동 (예: 대치동)
+  - `exclusive_area` (number, required) — 전용면적(㎡). 면적별 시세 차이가 커 필수
+  - `deposit` (integer, required) — 전세 보증금(원)
   - `property_type` (enum `apartment`|`villa`, required)
   - `monthly_rent` (integer, optional) — 반전세 월세(원)
 - **output (구조화 + 마크다운)**: `jeonse_ratio`, `risk_zone`(안전구간 아님·주의/위험 신호), `price_confidence`(level + 비교건수), `register_check_items[]`, `landlord_watchlist_hit`(bool+근거), `disclaimer`
