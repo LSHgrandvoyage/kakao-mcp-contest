@@ -109,6 +109,8 @@
   - `monthly_rent` (integer, optional) — 반전세 월세(원)
 - **output (구조화 + 마크다운)**: `jeonse_ratio`, `risk_zone`(안전구간 아님·주의/위험 신호), `price_confidence`(level + 비교건수), `register_check_items[]`, `landlord_watchlist_hit`(bool+근거), `disclaimer`
 - **annotations**: title=`Lease Risk Diagnosis` / readOnlyHint=`true` / destructiveHint=`false` / openWorldHint=`false`(로컬 폐쇄 데이터) / idempotentHint=`true`
+- **본선 확장(구현)**: inputSchema에 `senior_debt`·`senior_deposit`(선택) 추가 → `secured_ratio`(회수부담률) 계산.
+  output에 `secured_ratio`·`area_signal`(강남구 임차권등기명령 추세) 추가. 악성임대인 watchlist는 지역위험 신호로 대체. (상세 §7)
 
 ### `get_stage_checklist`
 - **description (영문)**:
@@ -149,3 +151,22 @@
 ① 국토부 API 응답 실물 검증(T001) → ② ingest 파이프라인 + lease.db → ③ `diagnose_lease_risk`
 → ④ `get_stage_checklist` → ⑤ `generate_contract_clauses` → ⑥ Dockerfile + 배포 → ⑦ 임시등록 테스트 → ⑧ 심사요청
 - 시간 부족 시 컷: HUG 명단(리스크1) → 빌라 커버리지 순. **tool 개수는 유지**(서사).
+
+## 7. 본선 확장 구현 (예선 이후 · 기술 상세)
+> spec §8 대응. 요청 핫패스 외부호출 0 원칙(§3-1) 유지 — IROS 데이터도 사전적재.
+
+### 7-1. 지역 위험 신호 (등기정보광장)
+- **API**: `data.iros.go.kr` 임차권등기명령 신청 부동산 현황(id `0000000079`), 시군구·월별·집합건물, JSON, 일 1,000회.
+  - 파라미터: `search_regn1=900`(서울)·`search_regn2=901`(강남구)·`search_real_cls=02`(집합건물)·`search_type=02`(월별).
+- **파일**: `ingest/iros_client.py`(수집) · `domain/area.py`(추세 판정, 순수) · `store.area_risk` 테이블.
+- **흐름**: ingest가 최근 12개월 적재 → `area_risk` → diagnose가 최근3 vs 직전3 합으로 추세 계산 → 렌더에 '지역 신호' 섹션.
+- **키**: `IROS_SERVICE_KEY`는 ingest 배치에서만(런타임 미인지). 키 없으면 실거래는 정상, 지역신호만 생략.
+- **정직성**: 강남구 전체 통계 → "개별 매물 상태 아님" 명시. 개별 근저당 대체 아님(개별 조회는 유료·불가 확인).
+
+### 7-2. 근저당 회수부담률 (사용자 입력)
+- **입력**: `diagnose_lease_risk`에 `senior_debt`·`senior_deposit`(선택, 기본 0) 추가.
+- **로직**(`domain/policy.assess`): `senior_total>0`이면 `secured_ratio=(선순위+보증금)/시세`로 위험구간 판정,
+  전세가율은 병기. `senior_total=0`이면 기존 전세가율 기준 + "근저당 알려주면 더 정확히" 안내.
+- **정책**: A(시세 기준) 채택 + 낙찰가율 70~80% 주의를 출력에 고지. 임계값(80/70%)은 `policy` 상수(설정 분리).
+- **테스트**: `test_senior_debt_flips_zone` — 근저당 반영 시 LOW→CAUTION 뒤집힘 검증.
+- **성능·무상태**: 순수 계산이라 외부호출 0, 입력값 미저장.

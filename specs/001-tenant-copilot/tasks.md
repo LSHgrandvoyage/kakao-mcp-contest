@@ -64,3 +64,15 @@
 1. T030 실패 시 미납국세 안내로 대체(기능 유지)
 2. 빌라 커버리지 축소(아파트 우선)
 3. 위험구간 판정 정교함 축소(임계값 단순화)
+
+## Phase 7 — 본선 확장 (예선 제출 이후) ✅
+> spec §8 / plan §7. tool 3개 유지, `diagnose_lease_risk` 강화. 회귀 통과(policy 7종·서버 3종·성능).
+- [x] T070 등기정보광장 클라이언트 `ingest/iros_client.py` — 임차권등기명령(id 0000000079) JSON 파싱(실물 검증)
+- [x] T071 지역위험 도메인 `domain/area.py` — 최근3 vs 직전3 추세(RISING/FLAT/FALLING), 순수+테스트
+- [x] T072 `store.area_risk` 테이블 + `run.py` 지역위험 적재(선택, 키 없으면 생략) — 강남구 12개월
+- [x] T073 diagnose 통합 — 렌더에 '지역 신호(강남구 전체)' 섹션, 미적재 시 graceful 생략
+- [x] T074 근저당 입력 `senior_debt`·`senior_deposit` → `secured_ratio` 계산(`policy.assess`)
+- [x] T075 낙찰가율(B) 주의 출력 고지 + 근저당 미입력 시 안내 nudge
+- [x] T076 테스트 `test_senior_debt_flips_zone` + 실데이터 데모(근저당 8억 → LOW→CAUTION 뒤집힘)
+- [ ] T077 재배포(본선용) — 커밋 → PlayMCP in KC 재빌드 ← 사용자
+- 남은 숙제(본선): 개별 근저당 자동조회(유료 벽), 지역 확대, 강제경매 지표 추가, Kakao Tools 위젯

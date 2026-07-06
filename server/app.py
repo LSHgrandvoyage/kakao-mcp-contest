@@ -47,8 +47,18 @@ def _render_diagnosis(r: DiagnoseResult, monthly_rent: int) -> str:
         lines.append(f"- 대상: {r.matched.umd} {r.matched.building_name} · 전용 {r.query_area}㎡")
         if a.median_price:
             lines.append(f"- 최근 매매 시세(중앙값): {_won(a.median_price)} · 비교 표본 {a.sample_count}건")
-    lines.append(f"- 전세가율: {a.jeonse_ratio if a.jeonse_ratio is not None else '산정 불가'}"
-                 f"{'%' if a.jeonse_ratio is not None else ''} → **{_ZONE_KR[a.zone]}**")
+    if a.jeonse_ratio is None:
+        lines.append(f"- 전세가율: 산정 불가 → **{_ZONE_KR[a.zone]}**")
+    else:
+        tail = f" · 선순위 포함 회수부담률 {a.secured_ratio}%" if a.secured_ratio is not None else ""
+        lines.append(f"- 전세가율: {a.jeonse_ratio}%{tail} → **{_ZONE_KR[a.zone]}**")
+        if a.senior_debt or a.senior_deposit:
+            parts = []
+            if a.senior_debt:
+                parts.append(f"근저당 채권최고액 {_won(a.senior_debt)}")
+            if a.senior_deposit:
+                parts.append(f"선순위 보증금 {_won(a.senior_deposit)}")
+            lines.append(f"- 반영된 선순위: {' · '.join(parts)}")
     lines.append(f"- 시세 신뢰도: {_CONF_KR[a.confidence]}")
     if monthly_rent > 0:
         lines.append("- ⚠️ 월세/반전세는 보증금만으로 전세가율을 해석하면 위험이 과소평가될 수 있습니다.")
@@ -74,6 +84,8 @@ def _render_diagnosis(r: DiagnoseResult, monthly_rent: int) -> str:
         "and property type, it computes the jeonse-to-sale-price ratio from recent real-transaction "
         "data (Ministry of Land/국토부) and returns risk-zone indicators, price-estimate confidence "
         "with comparable-transaction counts, and items to verify on the property register(등기부등본). "
+        "If the user provides the senior mortgage(근저당) amount from the register, it also computes a "
+        "deposit-recovery burden ratio for a more accurate judgment. "
         "It never declares a property 'safe'; it surfaces risk signals and next verification steps only. "
         "Preliminary screening, not legal advice."
     ),
@@ -85,12 +97,15 @@ def diagnose_lease_risk(
     deposit: Annotated[int, Field(description="전세 보증금(원)", gt=0)],
     property_type: Literal["apartment", "villa"],
     monthly_rent: Annotated[int, Field(description="반전세 월세(원), 순수 전세면 0", ge=0)] = 0,
+    senior_debt: Annotated[int, Field(description="등기부 을구 근저당 채권최고액 합계(원). 모르면 0", ge=0)] = 0,
+    senior_deposit: Annotated[int, Field(description="다가구 선순위 임차보증금 총액(원). 해당 없으면 0", ge=0)] = 0,
 ) -> str:
     repo, conn = _repo()
     try:
         result = _diagnose_service(
             repo, property_type=property_type, building_name=building_name,
             umd=umd, deposit=deposit, exclusive_area=exclusive_area,
+            senior_debt=senior_debt, senior_deposit=senior_deposit,
         )
     finally:
         conn.close()

@@ -43,11 +43,14 @@ class RiskZone(str, Enum):
 
 @dataclass
 class RiskAssessment:
-    jeonse_ratio: float | None          # 전세가율(%), 시세 없으면 None
+    jeonse_ratio: float | None          # 전세가율(%) = 보증금÷시세, 시세 없으면 None
     zone: RiskZone
     confidence: Confidence
     sample_count: int
     median_price: int | None            # 매매 시세 중앙값(원)
+    secured_ratio: float | None = None  # 회수부담률(%) = (선순위+보증금)÷시세, 근저당 입력 시만
+    senior_debt: int = 0                # 반영된 선순위 채권최고액(원)
+    senior_deposit: int = 0             # 반영된 선순위 임차보증금(원)
     signals: list[str] = field(default_factory=list)   # 위험 신호(신호 언어)
     verify_items: list[str] = field(default_factory=list)  # 사용자가 직접 확인할 항목
     disclaimer: str = DISCLAIMER
@@ -86,8 +89,12 @@ def classify_zone(ratio: float) -> RiskZone:
 
 
 def assess(deposit: int, median_price: int | None, sample_count: int,
-           property_type: str) -> RiskAssessment:
-    """전세 보증금 + 사전집계 시세 → 위험 평가. 순수 함수."""
+           property_type: str, senior_debt: int = 0, senior_deposit: int = 0) -> RiskAssessment:
+    """전세 보증금 + 사전집계 시세(+ 선택: 등기부 선순위) → 위험 평가. 순수 함수.
+
+    senior_debt(근저당 채권최고액)·senior_deposit(다가구 선순위 보증금)이 주어지면
+    회수부담률 = (선순위 + 보증금) ÷ 시세 를 계산해 위험구간을 그 기준으로 판정한다.
+    """
     verify = list(_BASE_VERIFY)
 
     # 시세를 못 구한 경우: 판정하지 않고 확인을 안내(에러 아님, 제품 원칙)
@@ -95,27 +102,41 @@ def assess(deposit: int, median_price: int | None, sample_count: int,
         return RiskAssessment(
             jeonse_ratio=None, zone=RiskZone.UNKNOWN, confidence=Confidence.NONE,
             sample_count=sample_count, median_price=median_price,
+            senior_debt=senior_debt or 0, senior_deposit=senior_deposit or 0,
             signals=["최근 실거래 기준 시세를 산정할 만한 비교 거래가 부족합니다(시세 신뢰도 없음)."],
             verify_items=verify,
         )
 
-    ratio = round(100.0 * deposit / median_price, 1)
-    zone = classify_zone(ratio)
+    jeonse_ratio = round(100.0 * deposit / median_price, 1)
+    senior_total = (senior_debt or 0) + (senior_deposit or 0)
+    secured_ratio = (round(100.0 * (senior_total + deposit) / median_price, 1)
+                     if senior_total > 0 else None)
+    ratio_for_zone = secured_ratio if secured_ratio is not None else jeonse_ratio
+
+    zone = classify_zone(ratio_for_zone)
     confidence = classify_confidence(sample_count, property_type)
 
+    label = "회수부담률" if secured_ratio is not None else "전세가율"
     signals: list[str] = []
     if zone == RiskZone.HIGH_SIGNAL:
-        signals.append(f"전세가율이 {ratio}%로 고위험 신호 구간입니다(깡통전세 위험 주의).")
+        signals.append(f"{label}이 {ratio_for_zone}%로 고위험 신호 구간입니다(깡통전세 위험 주의).")
     elif zone == RiskZone.CAUTION:
-        signals.append(f"전세가율이 {ratio}%로 주의 구간입니다.")
+        signals.append(f"{label}이 {ratio_for_zone}%로 주의 구간입니다.")
     else:
-        signals.append(f"전세가율은 {ratio}%로 위험 신호가 낮은 편입니다(단, 안전을 보장하지 않습니다).")
+        signals.append(f"{label}은 {ratio_for_zone}%로 위험 신호가 낮은 편입니다(단, 안전을 보장하지 않습니다).")
+
+    if secured_ratio is not None:
+        # 낙찰가율(B) 안내: A(시세 기준)로 계산하되, 실제 경매 위험을 사용자에게 고지
+        signals.append("경매 낙찰가는 통상 시세의 70~80% 수준이라, 실제 보증금 회수 위험은 위 수치보다 더 클 수 있습니다.")
+    else:
+        signals.append("등기부 을구의 근저당 채권최고액을 알려주시면 회수부담률까지 반영해 더 정확히 분석합니다.")
 
     if confidence in (Confidence.LOW, Confidence.NONE) or property_type == "villa":
         signals.append(f"비교 매매 표본이 {sample_count}건으로 시세 신뢰도가 낮아, 위 수치는 참고용입니다.")
 
     return RiskAssessment(
-        jeonse_ratio=ratio, zone=zone, confidence=confidence,
+        jeonse_ratio=jeonse_ratio, zone=zone, confidence=confidence,
         sample_count=sample_count, median_price=median_price,
+        secured_ratio=secured_ratio, senior_debt=senior_debt or 0, senior_deposit=senior_deposit or 0,
         signals=signals, verify_items=verify,
     )

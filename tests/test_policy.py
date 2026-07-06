@@ -46,6 +46,20 @@ def test_villa_confidence_capped():
     assert any("신뢰도가 낮" in s for s in r.signals)
 
 
+def test_senior_debt_flips_zone():
+    # 전세가율만이면 낮음, 근저당 포함하면 회수부담률이 올라 위험구간으로 뒤집힘
+    base = assess(deposit=340_000_000, median_price=1_465_000_000, sample_count=22,
+                  property_type="apartment")
+    assert base.zone == RiskZone.LOW_SIGNAL and base.secured_ratio is None
+
+    withdebt = assess(deposit=340_000_000, median_price=1_465_000_000, sample_count=22,
+                      property_type="apartment", senior_debt=800_000_000)
+    assert withdebt.jeonse_ratio == base.jeonse_ratio          # 전세가율은 그대로
+    assert withdebt.secured_ratio is not None and withdebt.secured_ratio > 70
+    assert withdebt.zone == RiskZone.CAUTION                    # (800+340)/1465 = 77.8% → 주의
+    assert any("낙찰가" in s for s in withdebt.signals)         # 낙찰가율(B) 안내 포함
+
+
 def test_disclaimer_always_present():
     for mp, sc in [(500_000_000, 6), (None, 0)]:
         r = assess(deposit=300_000_000, median_price=mp, sample_count=sc, property_type="apartment")
