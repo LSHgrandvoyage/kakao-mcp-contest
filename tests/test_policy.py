@@ -2,7 +2,7 @@
 실행: python -m tests.test_policy   (또는 pytest)
 """
 from domain import policy
-from domain.policy import Confidence, RiskZone, assess
+from domain.policy import Confidence, Guarantee, RiskZone, assess
 
 
 def test_ratio_and_zone_high_signal():
@@ -58,6 +58,19 @@ def test_senior_debt_flips_zone():
     assert withdebt.secured_ratio is not None and withdebt.secured_ratio > 70
     assert withdebt.zone == RiskZone.CAUTION                    # (800+340)/1465 = 77.8% → 주의
     assert any("낙찰가" in s for s in withdebt.signals)         # 낙찰가율(B) 안내 포함
+
+
+def test_guarantee_estimate():
+    # 부채비율 낮음 → 가입 가능성 높음
+    r = assess(deposit=100_000_000, median_price=1_000_000_000, sample_count=10, property_type="apartment")
+    assert r.guarantee.level == Guarantee.LIKELY
+    # 근저당 커서 부담률 100% 초과 + 근저당 60% 게이트 초과 → 거절 가능성
+    r2 = assess(deposit=340_000_000, median_price=1_000_000_000, sample_count=10,
+                property_type="apartment", senior_debt=800_000_000)
+    assert r2.guarantee.level == Guarantee.UNLIKELY
+    # 시세 없음 → 추정 불가
+    r3 = assess(deposit=300_000_000, median_price=None, sample_count=0, property_type="apartment")
+    assert r3.guarantee.level == Guarantee.UNKNOWN
 
 
 def test_disclaimer_always_present():

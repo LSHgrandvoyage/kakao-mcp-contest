@@ -12,7 +12,7 @@ from fastmcp import FastMCP
 from pydantic import Field
 
 from domain.area import area_message
-from domain.policy import Confidence, RiskZone
+from domain.policy import Confidence, Guarantee, RiskZone
 from domain.repository import MarketRepository, open_readonly
 from domain.service import DiagnoseResult, diagnose_lease_risk as _diagnose_service
 from ingest.config import DB_PATH
@@ -26,6 +26,8 @@ _ZONE_KR = {
 }
 _CONF_KR = {Confidence.NONE: "없음", Confidence.LOW: "낮음",
             Confidence.MEDIUM: "보통", Confidence.HIGH: "높음"}
+_GUAR_KR = {Guarantee.LIKELY: "가능성 높음", Guarantee.BORDERLINE: "경계(조건 확인 필요)",
+            Guarantee.UNLIKELY: "거절 가능성 있음", Guarantee.UNKNOWN: "추정 불가"}
 
 
 def _won(n: int | None) -> str:
@@ -60,6 +62,9 @@ def _render_diagnosis(r: DiagnoseResult, monthly_rent: int) -> str:
                 parts.append(f"선순위 보증금 {_won(a.senior_deposit)}")
             lines.append(f"- 반영된 선순위: {' · '.join(parts)}")
     lines.append(f"- 시세 신뢰도: {_CONF_KR[a.confidence]}")
+    if a.guarantee:
+        lines.append(f"- 전세보증보험(HUG) 가입 가능성(추정): **{_GUAR_KR[a.guarantee.level]}**")
+        lines.append(f"  · {a.guarantee.note}")
     if monthly_rent > 0:
         lines.append("- ⚠️ 월세/반전세는 보증금만으로 전세가율을 해석하면 위험이 과소평가될 수 있습니다.")
 
@@ -85,7 +90,7 @@ def _render_diagnosis(r: DiagnoseResult, monthly_rent: int) -> str:
         "data (Ministry of Land/국토부) and returns risk-zone indicators, price-estimate confidence "
         "with comparable-transaction counts, and items to verify on the property register(등기부등본). "
         "If the user provides the senior mortgage(근저당) amount from the register, it also computes a "
-        "deposit-recovery burden ratio for a more accurate judgment. "
+        "deposit-recovery burden ratio and estimates HUG rental-guarantee(전세보증보험) eligibility. "
         "It never declares a property 'safe'; it surfaces risk signals and next verification steps only. "
         "Preliminary screening, not legal advice."
     ),

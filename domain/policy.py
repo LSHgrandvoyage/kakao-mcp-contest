@@ -24,6 +24,11 @@ SAMPLE_MEDIUM = 3         # 이상 5 미만: 보통
 SAMPLE_LOW = 1            # 이상 3 미만: 낮음
 # 0 또는 시세 없음: 없음
 
+# 전세보증보험(HUG) 가입 가능성 추정 경계 — 부채비율 (선순위+보증금)÷시세(%)
+GUARANTEE_LIKELY_MAX = 80.0       # 이하: 가능성 높음
+GUARANTEE_BORDERLINE_MAX = 100.0  # 이하: 경계(조건 확인)
+SENIOR_DEBT_GATE = 60.0           # 선순위 근저당이 시세의 이 %를 넘으면 거절 가능성
+
 DISCLAIMER = "참고용 1차 스크리닝입니다. 법률 자문이 아니며, 계약 전 공인중개사·등기부로 직접 확인하세요."
 
 
@@ -41,6 +46,19 @@ class RiskZone(str, Enum):
     HIGH_SIGNAL = "high_signal"
 
 
+class Guarantee(str, Enum):
+    UNKNOWN = "unknown"        # 시세 없음 → 추정 불가
+    LIKELY = "likely"          # 가입 가능성 높음
+    BORDERLINE = "borderline"  # 경계(조건 확인 필요)
+    UNLIKELY = "unlikely"      # 거절 가능성 있음
+
+
+@dataclass
+class GuaranteeEstimate:
+    level: Guarantee
+    note: str
+
+
 @dataclass
 class RiskAssessment:
     jeonse_ratio: float | None          # 전세가율(%) = 보증금÷시세, 시세 없으면 None
@@ -51,6 +69,7 @@ class RiskAssessment:
     secured_ratio: float | None = None  # 회수부담률(%) = (선순위+보증금)÷시세, 근저당 입력 시만
     senior_debt: int = 0                # 반영된 선순위 채권최고액(원)
     senior_deposit: int = 0             # 반영된 선순위 임차보증금(원)
+    guarantee: GuaranteeEstimate | None = None  # 전세보증보험(HUG) 가입 가능성 추정
     signals: list[str] = field(default_factory=list)   # 위험 신호(신호 언어)
     verify_items: list[str] = field(default_factory=list)  # 사용자가 직접 확인할 항목
     disclaimer: str = DISCLAIMER
@@ -88,6 +107,30 @@ def classify_zone(ratio: float) -> RiskZone:
     return RiskZone.LOW_SIGNAL
 
 
+def estimate_guarantee(deposit: int, median_price: int, senior_debt: int,
+                       senior_deposit: int) -> GuaranteeEstimate:
+    """전세보증보험(HUG) 가입 가능성 추정 — 부채비율 (선순위+보증금)÷시세 기반 근사치.
+
+    실제 HUG 심사는 시세가 아닌 공시가격 기준이라, 이 추정은 낙관적일 수 있음을 note로 고지한다.
+    """
+    senior_total = (senior_debt or 0) + (senior_deposit or 0)
+    burden = 100.0 * (senior_total + deposit) / median_price
+
+    if 100.0 * (senior_debt or 0) / median_price > SENIOR_DEBT_GATE:
+        level = Guarantee.UNLIKELY  # 선순위 근저당 과다
+    elif burden > GUARANTEE_BORDERLINE_MAX:
+        level = Guarantee.UNLIKELY
+    elif burden > GUARANTEE_LIKELY_MAX:
+        level = Guarantee.BORDERLINE
+    else:
+        level = Guarantee.LIKELY
+
+    note = "HUG는 시세가 아닌 공시가격 기준으로 심사하므로 실제 기준은 더 엄격할 수 있는 추정치입니다."
+    if senior_total == 0:
+        note += " (선순위 채권 미반영 — 근저당이 있으면 가능성이 더 낮아집니다.)"
+    return GuaranteeEstimate(level, note)
+
+
 def assess(deposit: int, median_price: int | None, sample_count: int,
            property_type: str, senior_debt: int = 0, senior_deposit: int = 0) -> RiskAssessment:
     """전세 보증금 + 사전집계 시세(+ 선택: 등기부 선순위) → 위험 평가. 순수 함수.
@@ -103,6 +146,8 @@ def assess(deposit: int, median_price: int | None, sample_count: int,
             jeonse_ratio=None, zone=RiskZone.UNKNOWN, confidence=Confidence.NONE,
             sample_count=sample_count, median_price=median_price,
             senior_debt=senior_debt or 0, senior_deposit=senior_deposit or 0,
+            guarantee=GuaranteeEstimate(Guarantee.UNKNOWN,
+                "시세를 산정할 수 없어 보증보험 가입 가능성도 추정할 수 없습니다."),
             signals=["최근 실거래 기준 시세를 산정할 만한 비교 거래가 부족합니다(시세 신뢰도 없음)."],
             verify_items=verify,
         )
@@ -134,9 +179,12 @@ def assess(deposit: int, median_price: int | None, sample_count: int,
     if confidence in (Confidence.LOW, Confidence.NONE) or property_type == "villa":
         signals.append(f"비교 매매 표본이 {sample_count}건으로 시세 신뢰도가 낮아, 위 수치는 참고용입니다.")
 
+    guarantee = estimate_guarantee(deposit, median_price, senior_debt, senior_deposit)
+
     return RiskAssessment(
         jeonse_ratio=jeonse_ratio, zone=zone, confidence=confidence,
         sample_count=sample_count, median_price=median_price,
         secured_ratio=secured_ratio, senior_debt=senior_debt or 0, senior_deposit=senior_deposit or 0,
+        guarantee=guarantee,
         signals=signals, verify_items=verify,
     )
