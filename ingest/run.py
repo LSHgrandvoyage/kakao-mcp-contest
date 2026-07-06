@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 
 from . import config, store
 from .client import MolitApiError, MolitClient
+from .iros_client import IrosApiError, IrosClient
 from .normalize import to_record
 
 
@@ -54,6 +55,25 @@ def main() -> int:
 
     n_stats = store.build_price_stats(conn)
     print(f"\n신규 적재 {total_inserted}건, price_stats {n_stats}그룹 산출")
+
+    # 지역 위험 지표(등기정보광장) — 키 있을 때만. 없어도 실거래 적재는 정상 완료.
+    iros_key = os.getenv("IROS_SERVICE_KEY", "")
+    if iros_key and not iros_key.startswith("여기에"):
+        try:
+            iros = IrosClient(iros_key)
+            months = config.recent_months(12)
+            for m in config.IROS_METRICS:
+                rows = iros.fetch_monthly(config.IROS_URL, m["id"], config.IROS_REGN1,
+                                          config.IROS_REGN2, config.IROS_REAL_CLS,
+                                          months[0], months[-1])
+                store.insert_area_risk(conn, config.IROS_REGN2, config.IROS_REGION_NAME,
+                                       m["label"], rows)
+                print(f"  지역위험 {m['label']:22} +{len(rows)}개월")
+        except IrosApiError as e:
+            print(f"  [경고] 지역위험 적재 실패(무시): {e}", file=sys.stderr)
+    else:
+        print("  [안내] IROS_SERVICE_KEY 없음 — 지역위험 지표 건너뜀")
+
     print("요약:", store.summary(conn))
     print(f"→ {config.DB_PATH}")
     conn.close()

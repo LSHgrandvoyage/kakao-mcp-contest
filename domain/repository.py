@@ -60,6 +60,16 @@ class MarketRepository:
                     best = m
         return best
 
+    def area_series(self, metric: str) -> list[tuple[str, int]]:
+        """지역 위험 지표 월별 시계열 [(ym, cnt)]. 테이블 없거나(미적재) 데이터 없으면 []."""
+        try:
+            rows = self._conn.execute(
+                "SELECT ym, cnt FROM area_risk WHERE metric=? ORDER BY ym", (metric,)
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return []  # area_risk 테이블 미생성(IROS 미적재) → 지역 신호 없음
+        return [(r["ym"], r["cnt"]) for r in rows]
+
     def price_stat(self, property_type: str, building_key: str, area: float) -> tuple[int | None, int]:
         """(median_price, sample_count). 정확 버킷 우선, 없으면 ±1㎡ 버킷 폴백."""
         bucket = round(area)

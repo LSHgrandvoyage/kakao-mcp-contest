@@ -51,6 +51,16 @@ CREATE TABLE IF NOT EXISTS price_stats (
     sample_count  INTEGER NOT NULL,
     PRIMARY KEY (property_type, building_key, area_bucket)
 );
+
+-- 지역 위험 지표(등기정보광장 통계). 개별 매물 아님, 시군구 월별 집계.
+CREATE TABLE IF NOT EXISTS area_risk (
+    region_code TEXT NOT NULL,
+    region_name TEXT NOT NULL,
+    metric      TEXT NOT NULL,
+    ym          TEXT NOT NULL,
+    cnt         INTEGER NOT NULL,
+    PRIMARY KEY (region_code, metric, ym)
+);
 """
 
 # nat_key 를 제외한 값 컬럼(정규화 레코드 dict 의 키와 일치)
@@ -125,6 +135,20 @@ def build_price_stats(conn: sqlite3.Connection) -> int:
     conn.executemany(
         "INSERT INTO price_stats (property_type, building_key, area_bucket, "
         "median_price, sample_count) VALUES (?, ?, ?, ?, ?)", payload
+    )
+    conn.commit()
+    return len(payload)
+
+
+def insert_area_risk(conn: sqlite3.Connection, region_code: str, region_name: str,
+                     metric: str, rows: list[dict]) -> int:
+    """지역 위험 통계 적재. rows: [{'ym': 'YYYY-MM', 'cnt': int}]. 멱등 upsert."""
+    payload = [(region_code, region_name, metric, r["ym"], r["cnt"]) for r in rows]
+    conn.executemany(
+        "INSERT INTO area_risk (region_code, region_name, metric, ym, cnt) "
+        "VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT(region_code, metric, ym) DO UPDATE SET cnt=excluded.cnt",
+        payload,
     )
     conn.commit()
     return len(payload)

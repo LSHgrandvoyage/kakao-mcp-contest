@@ -11,6 +11,7 @@ from typing import Annotated, Literal
 from fastmcp import FastMCP
 from pydantic import Field
 
+from domain.area import area_message
 from domain.policy import Confidence, RiskZone
 from domain.repository import MarketRepository, open_readonly
 from domain.service import DiagnoseResult, diagnose_lease_risk as _diagnose_service
@@ -54,6 +55,10 @@ def _render_diagnosis(r: DiagnoseResult, monthly_rent: int) -> str:
 
     lines.append("\n**위험 신호**")
     lines += [f"- {s}" for s in a.signals]
+    if r.area_signal:
+        lines.append("\n**지역 신호 (강남구 전체)**")
+        lines.append(f"- {area_message(r.area_signal)}")
+        lines.append("- (강남구 전체 통계이며, 이 매물 개별 상태는 아닙니다.)")
     lines.append("\n**직접 확인하세요**")
     lines += [f"- {v}" for v in a.verify_items]
     lines.append(f"\n> {a.disclaimer}")

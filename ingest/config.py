@@ -43,6 +43,17 @@ SOURCES = [
 # 산출물 경로 (커밋 대상 — 이미지 동봉)
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "lease.db")
 
+# ── 등기정보광장(data.iros.go.kr) — 지역 위험 지표 (선택) ──
+# 개별 매물이 아니라 시군구 월별 통계. 강남구 임차권등기명령(집합건물) 추세를 지역 신호로 사용.
+IROS_URL = "https://data.iros.go.kr/openapi/cr/rs/selectCrRsRgsCsOpenApi.rest"
+IROS_REGN1 = os.getenv("IROS_REGN1", "900")   # 서울특별시
+IROS_REGN2 = os.getenv("IROS_REGN2", "901")   # 강남구
+IROS_REGION_NAME = os.getenv("IROS_REGION_NAME", "강남구")
+IROS_REAL_CLS = "02"                          # 집합건물(아파트+빌라)
+IROS_METRICS = [
+    {"id": "0000000079", "label": "임차권등기명령(집합건물)"},
+]
+
 
 def recent_months(n: int = DEFAULT_MONTHS, today: date | None = None) -> list[str]:
     """오늘 기준 최근 n개월을 'YYYYMM' 문자열 리스트로 (오래된 → 최신)."""
