@@ -168,5 +168,7 @@ def generate_contract_clauses(
 
 
 if __name__ == "__main__":
+    # stateless_http=True: 요청마다 독립(세션 미유지) → 멀티 replica 환경에서 세션 어피니티
+    # 없이도 동작(개발가이드 "Stateless 권장"). 우리 tool은 이미 요청 간 상태가 없음.
     mcp.run(transport="streamable-http", host="0.0.0.0",
-            port=int(os.getenv("PORT", "8000")))
+            port=int(os.getenv("PORT", "8000")), stateless_http=True)
