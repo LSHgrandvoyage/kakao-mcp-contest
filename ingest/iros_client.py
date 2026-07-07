@@ -32,9 +32,11 @@ class IrosClient:
             "id": api_id, "reqtype": "json",
             "search_type_api": "02",  # 월별
             "search_start_date_api": start_ym, "search_end_date_api": end_ym,
-            "search_regn1_name_api": regn1, "search_regn2_name_api": regn2,
+            "search_regn1_name_api": regn1,
             "search_real_cls_api": real_cls,
         }
+        if regn2:  # 시군구 코드 있을 때만(빈값이면 시도 전체)
+            params["search_regn2_name_api"] = regn2
         # key 는 재인코딩 방지를 위해 raw 로 붙인다(국토부 클라이언트와 동일 방침).
         full = f"{url}?key={self._key}&{urlencode(params)}"
         try:
@@ -52,10 +54,11 @@ class IrosClient:
         items = (result.get("items") or {}).get("item") or []
         if isinstance(items, dict):  # 단건이면 dict 로 옴
             items = [items]
-        out: list[dict] = []
+        # 월별로 합산(시도 전체 조회 시 구별 여러 행이 와도 견고하게)
+        agg: dict[str, int] = {}
         for it in items:
             ym = (it.get("resDate") or "").strip()
             tot = (it.get("tot") or "").strip()
             if ym and tot.isdigit():
-                out.append({"ym": ym, "cnt": int(tot)})
-        return out
+                agg[ym] = agg.get(ym, 0) + int(tot)
+        return [{"ym": ym, "cnt": cnt} for ym, cnt in sorted(agg.items())]

@@ -71,9 +71,9 @@ def _render_diagnosis(r: DiagnoseResult, monthly_rent: int) -> str:
     lines.append("\n**위험 신호**")
     lines += [f"- {s}" for s in a.signals]
     if r.area_signal:
-        lines.append("\n**지역 신호 (강남구 전체)**")
+        lines.append("\n**지역 신호 (서울 전체)**")
         lines.append(f"- {area_message(r.area_signal)}")
-        lines.append("- (강남구 전체 통계이며, 이 매물 개별 상태는 아닙니다.)")
+        lines.append("- (서울 전체 통계이며, 이 매물 개별 상태는 아닙니다.)")
     lines.append("\n**직접 확인하세요**")
     lines += [f"- {v}" for v in a.verify_items]
     lines.append(f"\n> {a.disclaimer}")
@@ -84,7 +84,7 @@ def _render_diagnosis(r: DiagnoseResult, monthly_rent: int) -> str:
     annotations={"title": "Lease Risk Diagnosis", "readOnlyHint": True,
                  "destructiveHint": False, "openWorldHint": False, "idempotentHint": True},
     description=(
-        "Analyzes lease risk signals for a rental home in Gangnam-gu, Seoul with "
+        "Analyzes lease risk signals for a rental home in Seoul with "
         "Lease Guide(전월세 길잡이). Given a building name, dong(umd), exclusive area, deposit, "
         "and property type, it computes the jeonse-to-sale-price ratio from recent real-transaction "
         "data (Ministry of Land/국토부) and returns risk-zone indicators, price-estimate confidence "
@@ -101,6 +101,7 @@ def diagnose_lease_risk(
     exclusive_area: Annotated[float, Field(description="전용면적(㎡)", gt=0)],
     deposit: Annotated[int, Field(description="전세 보증금(원)", gt=0)],
     property_type: Literal["apartment", "villa"],
+    sigungu: Annotated[str, Field(description="자치구 (예: 강남구). 같은 동명이 여러 구에 있을 때 구분용, 모르면 빈값")] = "",
     monthly_rent: Annotated[int, Field(description="반전세 월세(원), 순수 전세면 0", ge=0)] = 0,
     senior_debt: Annotated[int, Field(description="등기부 을구 근저당 채권최고액 합계(원). 모르면 0", ge=0)] = 0,
     senior_deposit: Annotated[int, Field(description="다가구 선순위 임차보증금 총액(원). 해당 없으면 0", ge=0)] = 0,
@@ -111,6 +112,7 @@ def diagnose_lease_risk(
             repo, property_type=property_type, building_name=building_name,
             umd=umd, deposit=deposit, exclusive_area=exclusive_area,
             senior_debt=senior_debt, senior_deposit=senior_deposit,
+            sigungu=sigungu or None,
         )
     finally:
         conn.close()

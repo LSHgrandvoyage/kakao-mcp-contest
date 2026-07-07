@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     property_type TEXT NOT NULL,
     deal_type     TEXT NOT NULL,
     building_key  TEXT NOT NULL,
+    sgg_code      TEXT,
     apt_seq       TEXT,
     building_name TEXT,
     umd           TEXT,
@@ -40,8 +41,9 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 
 -- 조회 인덱스(constitution §3-1: 로컬 조회는 인덱스 필수)
-CREATE INDEX IF NOT EXISTS ix_txn_lookup ON transactions (building_key, excl_area);
-CREATE INDEX IF NOT EXISTS ix_txn_umd    ON transactions (umd);
+CREATE INDEX IF NOT EXISTS ix_txn_lookup   ON transactions (building_key, excl_area);
+CREATE INDEX IF NOT EXISTS ix_txn_sgg_umd  ON transactions (sgg_code, umd);
+CREATE INDEX IF NOT EXISTS ix_txn_umd_name ON transactions (umd, property_type);
 
 CREATE TABLE IF NOT EXISTS price_stats (
     property_type TEXT NOT NULL,
@@ -65,7 +67,7 @@ CREATE TABLE IF NOT EXISTS area_risk (
 
 # nat_key 를 제외한 값 컬럼(정규화 레코드 dict 의 키와 일치)
 _COLS = [
-    "property_type", "deal_type", "building_key", "apt_seq", "building_name",
+    "property_type", "deal_type", "building_key", "sgg_code", "apt_seq", "building_name",
     "umd", "jibun", "road_name", "excl_area", "floor", "build_year",
     "deal_date", "price_amount", "deposit", "monthly_rent", "is_jeonse",
     "cancelled", "land_lease",

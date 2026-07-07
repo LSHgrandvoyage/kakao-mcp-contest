@@ -36,18 +36,24 @@ class MarketRepository:
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
 
-    def resolve_building(self, name: str, umd: str, property_type: str) -> BuildingMatch | None:
-        """동 안에서 단지명이 매칭되는 건물 중 거래가 가장 많은(= 가장 그럴듯한) 것."""
+    def resolve_building(self, name: str, umd: str, property_type: str,
+                         sgg_code: str | None = None) -> BuildingMatch | None:
+        """동 안에서 단지명이 매칭되는 건물 중 거래가 가장 많은(= 가장 그럴듯한) 것.
+
+        sgg_code(시군구코드)가 주어지면 그 구로 한정 — 동명이 여러 구에 있을 때 중복 해소.
+        """
         target = _norm(name)
         if not target:
             return None
-        rows = self._conn.execute(
-            "SELECT building_key, building_name, umd, COUNT(*) c "
-            "FROM transactions WHERE property_type=? AND umd LIKE ? "
-            "AND building_name IS NOT NULL "
-            "GROUP BY building_key, building_name, umd",
-            (property_type, f"%{umd.strip()}%"),
-        ).fetchall()
+        # 법정동 정확일치(= ?)로 인덱스를 확실히 태운다(LIKE는 기본 NOCASE라 BINARY 인덱스 미사용).
+        sql = ("SELECT building_key, building_name, umd, COUNT(*) c "
+               "FROM transactions WHERE property_type=? AND umd=? AND building_name IS NOT NULL")
+        params: list = [property_type, umd.strip()]
+        if sgg_code:
+            sql += " AND sgg_code=?"
+            params.append(sgg_code)
+        sql += " GROUP BY building_key, building_name, umd"
+        rows = self._conn.execute(sql, params).fetchall()
 
         best: BuildingMatch | None = None
         for r in rows:

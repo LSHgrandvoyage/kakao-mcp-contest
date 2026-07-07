@@ -23,7 +23,7 @@ from .normalize import to_record
 def main() -> int:
     load_dotenv()
     key = os.getenv("MOLIT_SERVICE_KEY", "")
-    lawd = config.DEFAULT_LAWD_CD
+    lawds = config.LAWD_CDS
     months = config.recent_months()
 
     try:
@@ -36,22 +36,24 @@ def main() -> int:
     conn = store.connect(config.DB_PATH)
     store.init_schema(conn)
 
-    print(f"대상: LAWD_CD={lawd}, 기간={months[0]}~{months[-1]} ({len(months)}개월), 소스 {len(config.SOURCES)}종")
+    print(f"대상: 시군구 {len(lawds)}개, 기간={months[0]}~{months[-1]} ({len(months)}개월), 소스 {len(config.SOURCES)}종")
+    print(f"  예상 호출 ≈ {len(lawds) * len(config.SOURCES) * len(months)}회")
     total_inserted = 0
-    for src in config.SOURCES:
-        label = f"{src['property_type']}/{src['deal_type']}"
-        src_inserted = 0
-        for ymd in months:
-            try:
-                items = client.fetch_all(src["endpoint"], lawd, ymd)
-            except MolitApiError as e:
-                print(f"  [경고] {label} {ymd} 실패: {e}", file=sys.stderr)
-                continue
-            records = [r for it in items
-                       if (r := to_record(it, src["property_type"], src["deal_type"]))]
-            src_inserted += store.insert_records(conn, records)
-        print(f"  {label:18} +{src_inserted}건")
-        total_inserted += src_inserted
+    for lawd in lawds:
+        gu = config.SEOUL_DISTRICTS.get(lawd, lawd)
+        gu_inserted = 0
+        for src in config.SOURCES:
+            for ymd in months:
+                try:
+                    items = client.fetch_all(src["endpoint"], lawd, ymd)
+                except MolitApiError as e:
+                    print(f"  [경고] {gu} {src['property_type']}/{src['deal_type']} {ymd} 실패: {e}", file=sys.stderr)
+                    continue
+                records = [r for it in items
+                           if (r := to_record(it, src["property_type"], src["deal_type"]))]
+                gu_inserted += store.insert_records(conn, records)
+        print(f"  {gu:8} +{gu_inserted}건")
+        total_inserted += gu_inserted
 
     n_stats = store.build_price_stats(conn)
     print(f"\n신규 적재 {total_inserted}건, price_stats {n_stats}그룹 산출")
@@ -66,8 +68,8 @@ def main() -> int:
                 rows = iros.fetch_monthly(config.IROS_URL, m["id"], config.IROS_REGN1,
                                           config.IROS_REGN2, config.IROS_REAL_CLS,
                                           months[0], months[-1])
-                store.insert_area_risk(conn, config.IROS_REGN2, config.IROS_REGION_NAME,
-                                       m["label"], rows)
+                store.insert_area_risk(conn, config.IROS_REGN2 or config.IROS_REGN1,
+                                       config.IROS_REGION_NAME, m["label"], rows)
                 print(f"  지역위험 {m['label']:22} +{len(rows)}개월")
         except IrosApiError as e:
             print(f"  [경고] 지역위험 적재 실패(무시): {e}", file=sys.stderr)

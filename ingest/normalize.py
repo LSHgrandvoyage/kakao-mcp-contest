@@ -61,11 +61,13 @@ def to_record(item: dict, property_type: str, deal_type: str) -> dict | None:
     name = _pick(item, "aptNm", "mhouseNm", "offiNm")
     jibun = _pick(item, "jibun")
     umd = _pick(item, "umdNm")
+    sgg = _pick(item, "sggCd")   # 시군구코드 (예: 11680)
     area = _float(_pick(item, "excluUseAr"))
 
-    # 건물 식별 키: 아파트는 aptSeq(신뢰), 빌라는 없으므로 합성.
+    # 건물 식별 키: 아파트는 aptSeq(시군구 접두 포함), 빌라는 시군구까지 넣어 합성
+    # (전국/서울 확장 시 다른 구의 동명·지번 충돌 방지)
     apt_seq = _pick(item, "aptSeq")
-    building_key = apt_seq or f"{umd}|{jibun}|{name}|{property_type}"
+    building_key = apt_seq or f"{sgg}|{umd}|{jibun}|{name}|{property_type}"
 
     price_amount = _won(item.get("dealAmount")) if deal_type == "trade" else None
     deposit = _won(item.get("deposit")) if deal_type == "rent" else None
@@ -83,6 +85,7 @@ def to_record(item: dict, property_type: str, deal_type: str) -> dict | None:
         "property_type": property_type,
         "deal_type": deal_type,
         "building_key": building_key,
+        "sgg_code": sgg or None,
         "apt_seq": apt_seq or None,
         "building_name": name or None,
         "umd": umd or None,
