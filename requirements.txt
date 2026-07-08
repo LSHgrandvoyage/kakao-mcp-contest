@@ -1,5 +1,7 @@
 # 런타임(MCP 서버)
-fastmcp>=2.0
+# 핀 고정: 3.4.3에서 Host 검증(HostOriginGuardMiddleware)이 추가돼 동작이 바뀜.
+# 로컬=배포 버전을 일치시켜 예측 가능하게. (unpinned면 배포가 다른 버전 → 예상 못한 421)
+fastmcp==3.4.3
 
 # ingest 배치
 requests>=2.31

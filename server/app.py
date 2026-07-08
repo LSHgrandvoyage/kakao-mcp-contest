@@ -170,5 +170,9 @@ def generate_contract_clauses(
 if __name__ == "__main__":
     # stateless_http=True: 요청마다 독립(세션 미유지) → 멀티 replica 환경에서 세션 어피니티
     # 없이도 동작(개발가이드 "Stateless 권장"). 우리 tool은 이미 요청 간 상태가 없음.
+    # host_origin_protection=False: FastMCP 3.4.3+ 는 Host 검증(HostOriginGuardMiddleware)이
+    # 기본 ON이라 허용목록(localhost)에 없는 배포 도메인을 421("Misdirected Request")로 거부한다.
+    # 게이트웨이 뒤의 remote MCP 서버라 접근 통제는 게이트웨이가 하므로 앱단 가드는 비활성.
     mcp.run(transport="streamable-http", host="0.0.0.0",
-            port=int(os.getenv("PORT", "8000")), stateless_http=True)
+            port=int(os.getenv("PORT", "8000")), stateless_http=True,
+            host_origin_protection=False)
